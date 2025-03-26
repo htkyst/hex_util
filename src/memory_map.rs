@@ -1,23 +1,34 @@
 #[derive(Debug)]
 pub struct MemoryMap {
     data: Vec<Vec<u8>>,
-    size: usize,
     sector_size: usize,
     sector_num: usize,
 }
 
 impl MemoryMap {
+    /**
+     * MemoryMapの新規作成
+     * 
+     * @param size メモリサイズ
+     * @param sector_size セクタサイズ
+     * @return MemoryMap
+     */
     pub fn new(size: usize, sector_size: usize) -> MemoryMap {
-        let sector_num: usize = size / sector_size;
-        let mut data: Vec<Vec<u8>> = Vec::new();
+        // セクタ数の計算
+        let sector_num: usize = if sector_size != 0 {
+            size / sector_size
+        } else {
+            size
+        };
 
-        for _i in 0..sector_size {
+        let mut data: Vec<Vec<u8>> = Vec::new();
+        // セクタ数分のメモリを確保
+        for _i in 0..sector_num {
             data.push(Vec::new());
         }
 
         MemoryMap {
             data,
-            size,
             sector_size,
             sector_num,
         }
@@ -100,6 +111,14 @@ impl MemoryMap {
 #[cfg(test)]
 mod memory_map_tests {
     use super::*;
+
+    #[test]
+    fn new_test() {
+        let mem_map = MemoryMap::new(0x1000, 0x100);
+
+        assert_eq!(mem_map.sector_size, 0x100);
+        assert_eq!(mem_map.sector_num, 16);
+    }
 
     #[test]
     fn set_get_byte_normal() {

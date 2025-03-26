@@ -1,4 +1,4 @@
-use crate::data_manager::HexDataManager;
+use crate::data_manager::HexManager;
 use std::fs::File;
 use std::io::{BufRead, BufReader};
 
@@ -47,7 +47,7 @@ fn parse_hex_line(line: &str) -> Result<IntelHexRecordData, String> {
     })
 }
 
-pub fn read_intelhex_file(file_path: &str, data_mgr: &mut HexDataManager) -> Result<(), String> {
+pub fn read_intelhex_file(file_path: &str, manager: &mut HexManager) -> Result<(), String> {
     let file = File::open(file_path).map_err(|e| e.to_string());
     let reader = BufReader::new(file?);
 
@@ -59,12 +59,41 @@ pub fn read_intelhex_file(file_path: &str, data_mgr: &mut HexDataManager) -> Res
 
         match parse_hex_line(&line) {
             Ok(record) => {
-                data_mgr.set_data(record.address as u32, record.data);
+                manager.set_data(record.address as u32, record.data);
             }
             Err(_err) => {
                 return Err("Error: Parse intel hex record".to_string());
             }
         }
+    }
+
+    Ok(())
+}
+
+pub fn write_intelhex_file(file_path: &str, manager: &HexManager, ranges: Vec<AddressRange>) -> Result<(), String> {
+    let mut file = File::create(file_path).map_err(|e| e.to_string());
+
+    for range in ranges {
+        let data = manager.get_data(range.start, (range.end - range.start) as usize);
+        let mut sum: u16 = 0;
+        let mut bytes: Vec<u8> = Vec::new();
+
+        bytes.push(data.len() as u8);
+        bytes.push(((range.start >> 8) & 0xFF) as u8);
+        bytes.push((range.start & 0xFF) as u8);
+        bytes.push(0); // Record type
+        sum += data.len() as u16 + (range.start >> 8) as u16 + (range.start & 0xFF) as u16;
+
+        for d in data {
+            bytes.push(d);
+            sum += d as u16;
+        }
+
+        let checksum = (!sum & 0xFF) + 1;
+        bytes.push(checksum as u8);
+
+        let hex_line = format!(":{}{}\n", hex::encode(bytes), hex::encode([checksum]));
+        file.write_all(hex_line.as_bytes()).map_err(|e| e.to_string())?;
     }
 
     Ok(())
