@@ -1,8 +1,6 @@
-mod hex_manager;
 mod range;
 
 use std::env;
-use hex_manager::HexManager;
 use range::Range;
 
 struct OptionInfo {
@@ -43,7 +41,7 @@ fn convert_hex_data_type_to_enum(hex_file_type: &str) -> HexDataType {
 }
 
 struct OptionData {
-    range: Vec<Range>,
+    range: Vec<Range<u32>>,
 }
 
 fn check_option_format(option: &str) -> bool {
@@ -115,7 +113,34 @@ fn check_sub_options(options: &Vec<OptionInfo>, option_data: &mut OptionData) ->
     Ok(())
 }
 
+fn check_file_format(file_name: &str) -> Result<HexFormatType, String> {
+    let file_extension = file_name.split('.').last().unwrap_or("");
+    match file_extension {
+        "hex" => Ok(HexFormatType::IntelHex),
+        "mot" => Ok(HexFormatType::SRecord),
+        "bin" => Ok(HexFormatType::Binary),
+        _ => Err("Unknown file format".to_string()),
+    }
+}
+
 fn execute_show_command(option_data: &OptionData, filename: String) -> Result<(), String> {
+    let file_format = check_file_format(&filename)?;
+    
+
+    Ok(())
+}
+
+fn execute_convert_command(option_data: &OptionData, filename: String, format: HexFormatType) -> Result<(), String> {
+
+    Ok(())
+}
+
+fn execute_create_command(option_data: &OptionData, filename: String, size: u32, mode: HexDataType) -> Result<(), String> {
+
+    Ok(())
+}
+
+fn execute_remove_command(option_data: &OptionData, filename: String) -> Result<(), String> {
 
     Ok(())
 }
@@ -135,6 +160,7 @@ fn analyze_command_line(options: &Vec<OptionInfo>) -> Result<(), String> {
                 if option.args.len() != 1 {
                     return Err("Need one argument for show option".to_string());
                 }
+
 
             }
             "convert" => {
@@ -171,5 +197,8 @@ fn main() {
     }
 
     let options = parse_command_line(command_line);
-
+    if let Err(err) = analyze_command_line(&options) {
+        println!("Error: {}", err);
+        return;
+    }
 }

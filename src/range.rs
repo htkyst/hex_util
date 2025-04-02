@@ -1,20 +1,38 @@
-pub struct Range<T: Default = u32> {
+use std::cmp;
+
+pub struct Range<T> {
     start: T,
     end: T,
 }
 
-impl<T> Range<T> {
-    pub fn new<T>(start_addr: T, end_addr: T) -> Range<T> {
+impl<T: PartialOrd + Ord + Clone + Copy> Range<T> {
+    /**
+     * * Rangeの新規作成
+     * 
+     * * @param start_addr 開始アドレス
+     * * @param end_addr 終了アドレス
+     */
+    pub fn new(start_addr: T, end_addr: T) -> Range<T> {
+        if start_addr > end_addr {
+            panic!("Invalid range: start address is greater than end address");
+        }
         Range {
             start: start_addr,
             end: end_addr,
         }
     }
 
-    pub fn merge<T>(&mut self, range: Range<T>) -> bool {
-        if self.end >= range.start && range.end >= self.start {
-            self.start = self.start.min(range.start);
-            self.end = self.end.max(range.end);
+    /**
+     * * Rangeのマージ
+     * 
+     * * @param range マージするRange
+     * * @return true: マージ成功, false: マージ失敗
+     */
+    pub fn merge(&mut self, range: Range<T>) -> bool {
+        // もし範囲が重なっている場合はマージする
+        if self.start <= range.end || self.end >= range.start {
+            self.start = cmp::min(self.start, range.start);
+            self.end = cmp::max(self.end, range.end);
             return true;
         }
         return false;
