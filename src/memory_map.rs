@@ -34,16 +34,28 @@ impl MemoryMap {
         }
     }
 
+    /**
+     * アドレスからセクタインデックスを取得
+     */
     fn get_sector_index(&self, address: u32) -> usize {
         let index = address as usize / self.sector_size;
         return index;
     }
 
+    /**
+     * アドレスからセクタ内オフセットを取得
+     */
     fn get_sector_offset(&self, address: u32) -> usize {
         let offset = address as usize % self.sector_size;
         return offset;
     }
 
+    /**
+     * 1バイトデータをセット
+     * 
+     * @param address アドレス
+     * @param data データ
+     */
     pub fn set_byte(&mut self, address: u32, data: u8) {
         let index = self.get_sector_index(address);
         let offset = self.get_sector_offset(address);
@@ -60,7 +72,13 @@ impl MemoryMap {
         }
     }
 
-    pub fn set_multi_byte(&mut self, address: u32, data: Vec<u8>) {
+    /**
+     * 複数バイトデータをセット
+     * 
+     * @param address アドレス
+     * @param data データ
+     */
+    pub fn set_bytes(&mut self, address: u32, data: Vec<u8>) {
         let index = self.get_sector_index(address);
         let offset = self.get_sector_offset(address);
 
@@ -77,6 +95,12 @@ impl MemoryMap {
         }
     }
 
+    /**
+     * 1バイトデータを取得
+     * 
+     * @param address アドレス
+     * @return u8
+     */
     pub fn get_byte(&mut self, address: u32) -> u8 {
         let index = self.get_sector_index(address);
         let offset = self.get_sector_offset(address);
@@ -92,7 +116,14 @@ impl MemoryMap {
         }
     }
 
-    pub fn get_multi_byte(&mut self, address: u32, size: usize) -> Vec<u8> {
+    /**
+     * 複数バイトデータを取得
+     * 
+     * @param address アドレス
+     * @param size サイズ
+     * @return Vec<u8>
+     */
+    pub fn get_bytes(&mut self, address: u32, size: usize) -> Vec<u8> {
         let index = self.get_sector_index(address);
         let offset = self.get_sector_offset(address);
 
@@ -142,10 +173,10 @@ mod memory_map_tests {
         let mut mem_map = MemoryMap::new(0x1000, 0x100);
         let data: Vec<u8> = vec![0, 1, 2, 3, 4, 5, 6, 7];
 
-        mem_map.set_multi_byte(0x0, data.clone());
-        mem_map.set_multi_byte(0x100, data.clone());
+        mem_map.set_bytes(0x0, data.clone());
+        mem_map.set_bytes(0x100, data.clone());
 
-        assert_eq!(mem_map.get_multi_byte(0x0, 8), data.clone());
-        assert_eq!(mem_map.get_multi_byte(0x100, 8), data.clone());
+        assert_eq!(mem_map.get_bytes(0x0, 8), data.clone());
+        assert_eq!(mem_map.get_bytes(0x100, 8), data.clone());
     }
 }
