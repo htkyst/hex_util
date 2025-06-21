@@ -2,7 +2,6 @@
 pub struct MemoryMap {
     data: Vec<Vec<u8>>,
     sector_size: usize,
-    sector_num: usize,
 }
 
 impl MemoryMap {
@@ -30,7 +29,6 @@ impl MemoryMap {
         MemoryMap {
             data,
             sector_size,
-            sector_num,
         }
     }
 
@@ -101,7 +99,7 @@ impl MemoryMap {
      * @param address アドレス
      * @return u8
      */
-    pub fn get_byte(&mut self, address: u32) -> u8 {
+    pub fn get_byte(&self, address: u32) -> u8 {
         let index = self.get_sector_index(address);
         let offset = self.get_sector_offset(address);
 
@@ -123,7 +121,7 @@ impl MemoryMap {
      * @param size サイズ
      * @return Vec<u8>
      */
-    pub fn get_bytes(&mut self, address: u32, size: usize) -> Vec<u8> {
+    pub fn get_bytes(&self, address: u32, size: usize) -> Vec<u8> {
         let index = self.get_sector_index(address);
         let offset = self.get_sector_offset(address);
 
@@ -142,14 +140,6 @@ impl MemoryMap {
 #[cfg(test)]
 mod memory_map_tests {
     use super::*;
-
-    #[test]
-    fn new_test() {
-        let mem_map = MemoryMap::new(0x1000, 0x100);
-
-        assert_eq!(mem_map.sector_size, 0x100);
-        assert_eq!(mem_map.sector_num, 16);
-    }
 
     #[test]
     fn set_get_byte_normal() {
