@@ -1,16 +1,26 @@
 use std::cmp;
+use std::ops::Sub;
 
-pub struct Range<T> {
+trait UnsignedInteger {}
+impl UnsignedInteger for u8 {}
+impl UnsignedInteger for u16 {}
+impl UnsignedInteger for u32 {}
+impl UnsignedInteger for u64 {}
+impl UnsignedInteger for u128 {}
+impl UnsignedInteger for usize {}
+
+#[derive(Clone)]
+pub struct Range<T: UnsignedInteger> {
     pub start: T,
     pub end: T,
 }
 
 pub type AddressRange = Range<u32>;
 
-impl<T: PartialOrd + Ord + Clone + Copy> Range<T> {
+impl<T: UnsignedInteger + PartialOrd + Ord + Clone + Copy + Sub<Output = T>> Range<T> {
     /**
      * * Rangeの新規作成
-     * 
+     *
      * * @param start_addr 開始アドレス
      * * @param end_addr 終了アドレス
      */
@@ -26,7 +36,7 @@ impl<T: PartialOrd + Ord + Clone + Copy> Range<T> {
 
     /**
      * * Rangeのマージ
-     * 
+     *
      * * @param range マージするRange
      * * @return true: マージ成功, false: マージ失敗
      */
@@ -39,6 +49,15 @@ impl<T: PartialOrd + Ord + Clone + Copy> Range<T> {
         }
         return false;
     }
+
+    /**
+     * * Rangeのサイズを取得
+     *
+     * * @return サイズ
+     */
+    pub fn size(&self) -> T {
+        self.end - self.start
+    }
 }
 
 #[cfg(test)]
@@ -46,7 +65,7 @@ mod address_range_tests {
     use super::*;
 
     #[test]
-    fn merge_normal() {
+    fn address_range_normal() {
         let range = AddressRange::new(30, 70);
 
         // 前方重なり
@@ -90,5 +109,14 @@ mod address_range_tests {
         assert_eq!(range8.merge(&range), true);
         assert_eq!(range8.start, 30);
         assert_eq!(range8.end, 100);
+
+        let no_range = AddressRange::new(0, 0);
+        assert_eq!(no_range.size(), 0);
+    }
+
+    #[test]
+    #[should_panic]
+    fn address_range_abnormal() {
+        let _range = AddressRange::new(70, 30);
     }
 }

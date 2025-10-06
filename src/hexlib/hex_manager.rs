@@ -1,38 +1,50 @@
-use crate::hexlib::range::AddressRange;
 use crate::hexlib::memory_map::MemoryMap;
+use crate::hexlib::range::AddressRange;
 
 pub struct HexManager {
-    address_ranges: Vec<AddressRange>,
+    data_ranges: Vec<AddressRange>,
     memory_map: MemoryMap,
 }
 
 impl HexManager {
+    /**
+     * Create a new HexManager instance
+     */
     pub fn new() -> HexManager {
-        let size: usize = 4 * 1024 * 1024 * 1024;   // 4GB
-        let sector_size = 1024 * 4;                 // 4KB
-        let address_ranges: Vec<AddressRange> = Vec::new();
+        let size: usize = 4 * 1024 * 1024 * 1024; // 4GB
+        let sector_size = 1024 * 4; // 4KB
+        let data_ranges: Vec<AddressRange> = Vec::new();
         let memory_map = MemoryMap::new(size, sector_size);
 
         HexManager {
-            address_ranges,
+            data_ranges,
             memory_map,
         }
     }
 
+    /**
+     * Set data at the specified start address
+     *
+     * @param start_addr Start address to set data
+     * @param data Byte datas to set
+     */
     pub fn set_data(&mut self, start_addr: u32, data: Vec<u8>) {
         let end_addr = start_addr + data.len() as u32 - 1;
-        self.address_ranges.push(AddressRange::new(
-            start_addr,
-            end_addr,
-        ));
+        self.data_ranges.push(AddressRange::new(start_addr, end_addr));
         self.memory_map.set_bytes(start_addr, data);
     }
 
+    /**
+     * Get data from the specified start address
+     *
+     * @param start_addr Start address to get data
+     * @param size Number of bytes to get
+     */
     pub fn get_data(&self, start_addr: u32, size: usize) -> Vec<u8> {
         self.memory_map.get_bytes(start_addr, size)
     }
 
-    pub fn get_address_range(&self) -> &Vec<AddressRange> {
-        &self.address_ranges
+    pub fn get_data_ranges(&self) -> &Vec<AddressRange> {
+        &self.data_ranges
     }
 }

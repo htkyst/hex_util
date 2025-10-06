@@ -1,16 +1,17 @@
-use std::fs::File;
-use std::io::{BufRead, BufReader, Write, BufWriter};
 use crate::hexlib::hex_manager::HexManager;
 use crate::hexlib::range::AddressRange;
+use std::fs::File;
+use std::io::{BufRead, BufReader, BufWriter, Write};
 
 #[derive(Debug)]
 struct IntelHexRecordData {
-    record_type: u8,
+    record_type: u32,
     address: u16,
     data: Vec<u8>,
 }
 
-fn calc_checksum(bytes: &[u8]) -> u8 {
+// Calculate checksum byte for Intel HEX record
+fn calc_checksum_byte(bytes: &[u8]) -> u8 {
     let mut sum: u16 = 0;
     for i in bytes {
         sum += *i as u16;
@@ -18,6 +19,11 @@ fn calc_checksum(bytes: &[u8]) -> u8 {
     return ((!sum & 0xFF) + 1) as u8;
 }
 
+/**
+ * Parse a line of Intel HEX file and return the record data
+ *
+ * @param line A line from the Intel HEX file
+ */
 fn parse_hex_line(line: &str) -> Result<IntelHexRecordData, String> {
     if !line.starts_with(':') {
         return Err("Invalid start code".to_string());
@@ -36,12 +42,12 @@ fn parse_hex_line(line: &str) -> Result<IntelHexRecordData, String> {
     }
 
     let address = u16::from_be_bytes([bytes[1], bytes[2]]);
-    let record_type = bytes[3];
+    let record_type = bytes[3] as u32;
     let data = bytes[4..4 + data_len].to_vec();
     let checksum = bytes[4 + data_len];
 
     // Calc checksum
-    if checksum != calc_checksum(&bytes[0..bytes.len() - 1]) {
+    if checksum != calc_checksum_byte(&bytes[0..bytes.len() - 1]) {
         return Err("Invalid checksum".to_string());
     }
 
@@ -68,12 +74,12 @@ pub fn read_intelhex_file(file_path: &str, manager: &mut HexManager) -> Result<(
                     0x00 => {
                         // Data record
                         manager.set_data(record.address as u32, record.data);
-                    },
+                    }
                     0x01 => {
                         // End of file record
                         // No action needed, just continue to the next line
                         break;
-                    },
+                    }
                     _ => {
                         // Unsupported record type
                         return Err(format!("Unsupported record type: {}", record.record_type));
@@ -106,7 +112,7 @@ pub fn write_intelhex_file(file_path: &str, manager: &HexManager, ranges: &Vec<A
             bytes.push(d);
         }
 
-        bytes.push(calc_checksum(bytes.as_slice()));
+        bytes.push(calc_checksum_byte(bytes.as_slice()));
 
         let hex_line = format!(":{}\n", hex::encode_upper(bytes));
         writer.write(hex_line.as_bytes()).unwrap();
