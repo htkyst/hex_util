@@ -1,22 +1,22 @@
-use crate::hexlib::memory_map::MemoryMap;
-use crate::hexlib::range::AddressRange;
+use crate::hexlib::data_type::memory_map::MemoryMap;
+use crate::hexlib::data_type::range::AddressRange;
 
-pub struct HexManager {
+pub struct DataBuffer {
     data_ranges: Vec<AddressRange>,
     memory_map: MemoryMap,
 }
 
-impl HexManager {
+impl DataBuffer {
     /**
-     * Create a new HexManager instance
+     * Create a new DataBuffer instance
      */
-    pub fn new() -> HexManager {
-        let size: usize = 4 * 1024 * 1024 * 1024; // 4GB
-        let sector_size = 1024 * 4; // 4KB
+    pub fn new() -> DataBuffer {
+        let size: usize = 4 * 1024 * 1024 * 1024; // Maximum memory size: 4GB
+        let sector_size = 1024 * 4; // Sector size: 4KB
         let data_ranges: Vec<AddressRange> = Vec::new();
         let memory_map = MemoryMap::new(size, sector_size);
 
-        HexManager {
+        DataBuffer {
             data_ranges,
             memory_map,
         }

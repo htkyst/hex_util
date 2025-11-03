@@ -1,5 +1,5 @@
 use std::cmp;
-use std::ops::Sub;
+use std::ops::{Sub, Add};
 
 trait UnsignedInteger {}
 impl UnsignedInteger for u8 {}
@@ -17,20 +17,20 @@ pub struct Range<T: UnsignedInteger> {
 
 pub type AddressRange = Range<u32>;
 
-impl<T: UnsignedInteger + PartialOrd + Ord + Clone + Copy + Sub<Output = T>> Range<T> {
+impl<T: UnsignedInteger + PartialOrd + Ord + Clone + Copy + Sub<Output = T> + Add<Output = T>> Range<T> {
     /**
      * * Rangeの新規作成
      *
-     * * @param start_addr 開始アドレス
-     * * @param end_addr 終了アドレス
+     * * @param start 開始アドレス
+     * * @param end 終了アドレス
      */
-    pub fn new(start_addr: T, end_addr: T) -> Range<T> {
-        if start_addr > end_addr {
+    pub fn new(start: T, end: T) -> Range<T> {
+        if start > end {
             panic!("Invalid range: start address is greater than end address");
         }
         Range {
-            start: start_addr,
-            end: end_addr,
+            start,
+            end,
         }
     }
 
@@ -55,9 +55,12 @@ impl<T: UnsignedInteger + PartialOrd + Ord + Clone + Copy + Sub<Output = T>> Ran
      *
      * * @return サイズ
      */
-    pub fn size(&self) -> T {
-        self.end - self.start
+    pub fn size(&self) -> T 
+    where T: Copy + Sub<Output = T> + Add<Output = T> + From<u8>,
+    {
+        self.end - self.start + T::from(1u8)
     }
+
 }
 
 #[cfg(test)]
@@ -67,6 +70,7 @@ mod address_range_tests {
     #[test]
     fn address_range_normal() {
         let range = AddressRange::new(30, 70);
+        assert_eq!(range.size(), 40);
 
         // 前方重なり
         let mut range2 = AddressRange::new(0, 40);

@@ -1,5 +1,5 @@
-use crate::hexlib::hex_manager::HexManager;
-use crate::hexlib::range::AddressRange;
+use crate::hexlib::utility::data_buffer::DataBuffer;
+use crate::hexlib::data_type::range::AddressRange;
 use std::fs::File;
 use std::io::{BufRead, BufReader, BufWriter, Write};
 
@@ -10,6 +10,7 @@ struct SRecordData {
     data: Vec<u8>,
 }
 
+// Calculate checksum byte for Intel HEX record
 fn calc_checksum_byte(bytes: &[u8]) -> u8 {
     let mut sum: u16 = 0;
     for i in bytes {
@@ -18,7 +19,12 @@ fn calc_checksum_byte(bytes: &[u8]) -> u8 {
     return !((sum & 0xFF) as u8);
 }
 
-fn parse_hex_line(line: &str) -> Result<SRecordData, String> {
+/**
+ * Parse a line of S-record file and return the record data
+ *
+ * @param line A line from the S-record file
+ */
+fn parse_hex_line(line: String) -> Result<SRecordData, String> {
     // Check if the line starts with 'S'
     if !line.starts_with('S') {
         return Err("Invalid start code".to_string());
@@ -81,7 +87,13 @@ fn parse_hex_line(line: &str) -> Result<SRecordData, String> {
     })
 }
 
-pub fn read_srecord_file(file_path: &str, manager: &mut HexManager) -> Result<(), String> {
+/**
+ * Read S-record file and load data into DataBuffer
+ *
+ * @param file_path Path to the S-record file
+ * @param buffer DataBuffer to load data into
+ */
+pub fn read_srecord_file(file_path: &str, buffer: &mut DataBuffer) -> Result<(), String> {
     let file = File::open(file_path).map_err(|e| e.to_string());
     let reader = BufReader::new(file?);
 
@@ -92,10 +104,10 @@ pub fn read_srecord_file(file_path: &str, manager: &mut HexManager) -> Result<()
             continue;
         }
 
-        match parse_hex_line(&line) {
+        match parse_hex_line(line) {
             Ok(record) => match record.record_type {
                 1 | 2 | 3 => {
-                    manager.set_data(record.address, record.data);
+                    buffer.set_data(record.address, record.data);
                 }
                 _ => {
                     continue;
@@ -112,12 +124,19 @@ pub fn read_srecord_file(file_path: &str, manager: &mut HexManager) -> Result<()
     Ok(())
 }
 
-pub fn write_srecord_file(file_path: &str, manager: &HexManager, ranges: &Vec<AddressRange>) -> Result<(), String> {
+/**
+ * Write DataBuffer content into S-record file
+ *
+ * @param file_path Path to the S-record file
+ * @param buffer DataBuffer containing data to write
+ * @param ranges Address ranges to write
+ */
+pub fn write_srecord_file(file_path: &str, buffer: &DataBuffer, ranges: &Vec<AddressRange>) -> Result<(), String> {
     let mut file = File::create(file_path).map_err(|e| e.to_string())?;
     let mut writer = BufWriter::new(&mut file);
 
     for range in ranges {
-        let data = manager.get_data(range.start, (range.end - range.start + 1) as usize);
+        let data = buffer.get_data(range.start, (range.end - range.start + 1) as usize);
         if data.is_empty() {
             continue;
         }

@@ -1,203 +1,255 @@
-use crate::hexlib::{range, utility, HexLib};
-use indexmap::IndexMap;
+use crate::hexlib::{data_type::range::AddressRange, utility::range_utils};
+use crate::hexlib::HexLib;
+use std::collections::HashMap;
 
-type OptionFunc = fn(args: Vec<String>, hex_lib: &mut HexLib) -> Result<(), String>;
+enum ConvertFormat {
+    ToIntelHex,
+    ToMotorolaSRecord,
+    ToRawBinary,
+}
 
 #[derive(Clone)]
-pub struct CommandOptionInfo {
-    pub callback: OptionFunc,
+struct OptionInfo {
+    name: String,
     description: String,
     priority: u32,
 }
 
-// Function to check if a string is an option format
-// Example: Strings like "--aaa" or "--ccc" (at least 2 characters, starting with "--") are considered options
-fn check_option_format(option: &str) -> bool {
-    option.len() > 2 && option[0..2].eq("--")
+type OptionFunc = fn(&mut Command, Vec<String>, &mut HexLib) -> Result<(), String>;
+
+pub struct Command {
+    run_options: Vec<(OptionFunc, Vec<String>)>,
+    ranges: Vec<AddressRange>,
 }
 
-// Parse command line arguments into a list of options and their arguments
-pub fn parse_command_line(tokens: &Vec<String>) -> Vec<(String, Vec<String>)> {
-    if tokens.len() < 1 {
-        return Vec::new();
+impl Command {
+    const OPTION_HELP: &str = "help";
+    const OPTION_VERSION: &str = "version";
+    const OPTION_RANGE: &str = "range";
+    const OPTION_VIEW: &str = "view";
+    const OPTION_CONVERT: &str = "convert";
+    const OPTION_CREATE: &str = "create";
+    const OPTION_DEBUG: &str = "debug";
+
+    /**
+     * * Create a new Command instance
+     */
+    pub fn new() -> Command {
+        Command {
+            run_options: Vec::new(),
+            ranges: Vec::new(),
+        }
     }
 
-    let mut options = Vec::new();
-    let mut iter = tokens.into_iter().peekable();
+    fn get_option_list(&self) -> HashMap<String, OptionInfo> {
+        vec![
+            (
+                Self::OPTION_HELP.to_owned(),
+                OptionInfo {
+                    name: Self::OPTION_HELP.to_string(),
+                    description: "Show help message".to_string(),
+                    priority: 1,
+                },
+            ),
+            (
+                Self::OPTION_VERSION.to_owned(),
+                OptionInfo {
+                    name: Self::OPTION_VERSION.to_string(),
+                    description: "Show version".to_string(),
+                    priority: 1,
+                },
+            ),
+            (
+                Self::OPTION_RANGE.to_owned(),
+                OptionInfo {
+                    name: Self::OPTION_RANGE.to_string(),
+                    description: "Specify address range".to_string(),
+                    priority: 2,
+                },
+            ),
+            (
+                Self::OPTION_VIEW.to_owned(),
+                OptionInfo {
+                    name: Self::OPTION_VIEW.to_string(),
+                    description: "View data in hex file".to_string(),
+                    priority: 3,
+                },
+            ),
+            (
+                Self::OPTION_CONVERT.to_owned(),
+                OptionInfo {
+                    name: Self::OPTION_CONVERT.to_string(),
+                    description: "Convert hex file format".to_string(),
+                    priority: 4,
+                },
+            ),
+            (
+                Self::OPTION_CREATE.to_owned(),
+                OptionInfo {
+                    name: Self::OPTION_CREATE.to_string(),
+                    description: "Create hex file".to_string(),
+                    priority: 4,
+                },
+            ),
+            (
+                Self::OPTION_DEBUG.to_owned(),
+                OptionInfo {
+                    name: Self::OPTION_DEBUG.to_string(),
+                    description: "Debug option".to_string(),
+                    priority: 99,
+                },
+            ),
+        ]
+        .into_iter()
+        .collect::<HashMap<_, _>>()
+    }
 
-    while let Some(token) = iter.next() {
-        if check_option_format(&token) {
-            let mut args = Vec::new();
-            let opt_name = token.trim_start_matches("--").to_string();
+    // Analyze command line options
+    pub fn analyze(&mut self, opt_name_args: Vec<(String, Vec<String>)>) -> Result<(), String> {
+        let option_list = self.get_option_list();
 
-            while let Some(arg) = iter.peek() {
-                if check_option_format(arg) {
-                    break;
-                }
-                args.push(iter.next().unwrap().to_string());
+        let mut specific_options = Vec::new();
+        for (opt_name, opt_args) in opt_name_args {
+            if let Some(opt_info) = option_list.get(&opt_name) {
+                specific_options.push((opt_info.clone(), opt_args.clone()));
+            } else {
+                return Err(format!("Unknown option: --{}", opt_name));
             }
-
-            options.push((opt_name, args));
         }
-    }
 
-    options
-}
+        specific_options.sort_by_key(|(info, _)| info.priority);
 
-/////////////////////////////////////////////////////////////////////////
-
-fn help_option(_args: Vec<String>, _hexlib: &mut HexLib) -> Result<(), String> {
-    println!("Available options:");
-    for (optname, params) in get_option_info_list() {
-        println!(" - {} \t\t: {}", optname, params.description);
-    }
-    Ok(())
-}
-
-fn version_option(_args: Vec<String>, _hexlib: &mut HexLib) -> Result<(), String> {
-    println!("Version: {}", env!("CARGO_PKG_VERSION"));
-    Ok(())
-}
-
-fn range_option(args: Vec<String>, hexlib: &mut HexLib) -> Result<(), String> {
-    if args.len() != 2 {
-        return Err("Specify <start> <end>".to_string());
-    }
-
-    let mut start_addr: u32 = 0;
-    let mut end_addr: u32 = 0;
-
-    if let Some(start_hex) = args[0].strip_prefix("0x") {
-        match u32::from_str_radix(start_hex, 16) {
-            Ok(val) => start_addr = val,
-            Err(_) => return Err("Invalid start address format".to_string()),
+        for (opt_info, opt_args) in specific_options {
+            if let Some(callback) = self.get_option_callback(&opt_info.name) {
+                self.run_options.push((callback, opt_args));
+            } else {
+                return Err(format!("No callback found for option: --{}", opt_info.name));
+            }
         }
+
+        Ok(())
     }
 
-    if let Some(end_hex) = args[1].strip_prefix("0x") {
-        match u32::from_str_radix(end_hex, 16) {
-            Ok(val) => end_addr = val,
-            Err(_) => return Err("Invalid end address format".to_string()),
+    // Run the analyzed commands
+    pub fn run(&mut self, hexlib: &mut HexLib) -> Result<(), String> {
+        let options: Vec<_> = self.run_options.iter().cloned().collect();
+        for (opt_func, opt_args) in options {
+            match (opt_func)(self, opt_args, hexlib) {
+                Ok(()) => {}
+                Err(e) => return Err(e),
+            }
         }
+        Ok(())
     }
 
-    utility::rebuild_ranges(&mut hexlib.user_ranges, range::AddressRange::new(start_addr, end_addr));
-    if !hexlib.user_ranges.is_empty() {
-        hexlib.has_user_ranges = true;
-    }
+    //// Command Option Implementations ////
 
-    Ok(())
-}
-
-fn view_option(args: Vec<String>, hexlib: &mut HexLib) -> Result<(), String> {
-    // single argument <filename>
-    if args.len() != 1 {
-        return Err("Specify <filename>".to_string());
-    }
-
-    let filename = &args[0];
-    if let Err(e) = hexlib.read_file(filename) {
-        return Err(format!("Failed to read file: {}", e));
-    }
-
-    if hexlib.has_user_ranges {
-        for range in &hexlib.user_ranges {
-            let start = range.start;
-            let end = range.end;
-            hexlib.show_hex_data(start, end);
+    fn help_option(&mut self, _args: Vec<String>, _hexlib: &mut HexLib) -> Result<(), String> {
+        println!("Available options:");
+        for (optname, params) in self.get_option_list() {
+            println!(" - {} \t\t: {}", optname, params.description);
         }
-    } else {
-        for range in hexlib.hex_data.get_data_ranges() {
-            let start = range.start;
-            let end = range.end;
-            hexlib.show_hex_data(start, end);
+        Ok(())
+    }
+
+    fn version_option(&mut self, _args: Vec<String>, _hexlib: &mut HexLib) -> Result<(), String> {
+        println!("Version: {}", env!("CARGO_PKG_VERSION"));
+        Ok(())
+    }
+
+    fn range_option(&mut self, args: Vec<String>, _hexlib: &mut HexLib) -> Result<(), String> {
+        if args.len() != 2 {
+            return Err("Specify <start> <end>".to_string());
         }
+
+        let mut start_addr: u32 = 0;
+        let mut end_addr: u32 = 0;
+
+        if let Some(start_hex) = args[0].strip_prefix("0x") {
+            match u32::from_str_radix(start_hex, 16) {
+                Ok(val) => start_addr = val,
+                Err(_) => return Err("Invalid start address format".to_string()),
+            }
+        }
+
+        if let Some(end_hex) = args[1].strip_prefix("0x") {
+            match u32::from_str_radix(end_hex, 16) {
+                Ok(val) => end_addr = val,
+                Err(_) => return Err("Invalid end address format".to_string()),
+            }
+        }
+
+        range_utils::rebuild_ranges(&mut self.ranges, AddressRange::new(start_addr, end_addr));
+
+        Ok(())
     }
 
-    Ok(())
-}
+    fn view_option(&mut self, args: Vec<String>, hexlib: &mut HexLib) -> Result<(), String> {
+        // single argument <filename>
+        if args.len() != 1 {
+            return Err("Specify <filename>".to_string());
+        }
 
-fn create_option(args: Vec<String>, hexlib: &mut HexLib) -> Result<(), String> {
-    Ok(())
-}
+        let filename = &args[0];
+        if let Err(e) = hexlib.read_file(filename) {
+            return Err(format!("Failed to read file: {}", e));
+        }
 
-fn debug_option(_args: Vec<String>, hexlib: &mut HexLib) -> Result<(), String> {
-    for range in &hexlib.user_ranges {
-        println!("Range: 0x{:08X} - 0x{:08X}", range.start, range.end);
-    }
-
-    Ok(())
-}
-
-fn get_option_info_list() -> IndexMap<String, CommandOptionInfo> {
-    vec![
-        (
-            "help".to_owned(),
-            CommandOptionInfo {
-                callback: help_option,
-                description: "Show help message".to_string(),
-                priority: 1,
-            },
-        ),
-        (
-            "version".to_owned(),
-            CommandOptionInfo {
-                callback: version_option,
-                description: "Show version".to_string(),
-                priority: 1,
-            },
-        ),
-        (
-            "range".to_owned(),
-            CommandOptionInfo {
-                callback: range_option,
-                description: "Specify address range".to_string(),
-                priority: 2,
-            },
-        ),
-        (
-            "view".to_owned(),
-            CommandOptionInfo {
-                callback: view_option,
-                description: "View data in hex file".to_string(),
-                priority: 3,
-            },
-        ),
-        (
-            "create".to_owned(),
-            CommandOptionInfo {
-                callback: create_option,
-                description: "Create hex file".to_string(),
-                priority: 4,
-            },
-        ),
-        (
-            "debug".to_owned(),
-            CommandOptionInfo {
-                callback: debug_option,
-                description: "Debug option".to_string(),
-                priority: 99,
-            },
-        ),
-    ]
-    .into_iter()
-    .collect::<IndexMap<_, _>>()
-}
-
-// Analyze and sort options based on priority
-pub fn analyze_option(options: Vec<(String, Vec<String>)>) -> Result<Vec<(CommandOptionInfo, Vec<String>)>, String> {
-    let mut use_options = Vec::new();
-    let option_list = get_option_info_list();
-
-    for (opt_name, opt_args) in options {
-        if let Some(opt_info) = option_list.get(&opt_name) {
-            use_options.push((opt_info.clone(), opt_args.clone()));
+        if self.ranges.len() > 0 {
+            for range in &self.ranges {
+                let start = range.start;
+                let end = range.end;
+                hexlib.show_hex_data(start, end);
+            }
         } else {
-            return Err(format!("Unknown option: --{}", opt_name));
+            for range in hexlib.data_buffer.get_data_ranges() {
+                let start = range.start;
+                let end = range.end;
+                hexlib.show_hex_data(start, end);
+            }
         }
+
+        Ok(())
     }
 
-    use_options.sort_by_key(|(info, _)| info.priority);
+    fn convert_option(&mut self, args: Vec<String>, hexlib: &mut HexLib) -> Result<(), String> {
+        if args.len() != 2 {
+            return Err("Specify <input filename> <format>".to_string());
+        }
 
-    Ok(use_options)
+        let filename = &args[0];
+        let format = &args[1];
+
+        if let Err(e) = hexlib.read_file(filename) {
+            return Err(format!("Failed to read file: {}", e));
+        }
+
+        Ok(())
+    }
+
+    fn create_option(&mut self, args: Vec<String>, hexlib: &mut HexLib) -> Result<(), String> {
+        Ok(())
+    }
+
+    fn debug_option(&mut self, _args: Vec<String>, hexlib: &mut HexLib) -> Result<(), String> {
+        println!("Debug Info:");
+
+        for range in self.ranges.iter() {
+            println!(" Range: 0x{:08X} - 0x{:08X}", range.start, range.end);
+        }
+        Ok(())
+    }
+
+    fn get_option_callback(&self, option_name: &str) -> Option<OptionFunc> {
+        match option_name {
+            Self::OPTION_HELP => Some(Command::help_option),
+            Self::OPTION_VERSION => Some(Command::version_option),
+            Self::OPTION_RANGE => Some(Command::range_option),
+            Self::OPTION_VIEW => Some(Command::view_option),
+            Self::OPTION_CONVERT => Some(Command::convert_option),
+            Self::OPTION_CREATE => Some(Command::create_option),
+            Self::OPTION_DEBUG => Some(Command::debug_option),
+            _ => None,
+        }
+    }
 }

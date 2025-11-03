@@ -7,18 +7,18 @@ pub struct MemoryMap {
 
 impl MemoryMap {
     /**
-     * MemoryMapの新規作成
+     * Create a new MemoryMap
      *
-     * @param size メモリサイズ
-     * @param sector_size セクタサイズ
+     * @param size Memory size
+     * @param sector_size Sector size
      * @return MemoryMap
      */
     pub fn new(size: usize, sector_size: usize) -> MemoryMap {
-        // セクタ数の計算
+        // Calculate number of sectors
         let sector_num: usize = if sector_size != 0 { size / sector_size } else { 1 };
 
         let mut data: Vec<Vec<u8>> = Vec::new();
-        // セクタ数分のメモリを確保
+        // Allocate memory for each sector
         for _i in 0..sector_num {
             data.push(Vec::new());
         }
@@ -35,7 +35,7 @@ impl MemoryMap {
     }
 
     /**
-     * アドレスからセクタインデックスを取得
+    * Get sector index from address
      */
     fn get_sector_index(&self, address: u32) -> usize {
         let index = address as usize / self.sector_size;
@@ -43,7 +43,7 @@ impl MemoryMap {
     }
 
     /**
-     * アドレスからセクタ内オフセットを取得
+    * Get offset address in sector from address
      */
     fn get_sector_offset(&self, address: u32) -> usize {
         let offset = address as usize % self.sector_size;
@@ -51,10 +51,10 @@ impl MemoryMap {
     }
 
     /**
-     * 1バイトデータをセット
+     * Set a single byte.
      *
-     * @param address アドレス
-     * @param data データ
+     * @param address Address
+     * @param data Data byte
      */
     pub fn set_byte(&mut self, address: u32, data: u8) {
         if !self.is_valid_address(address) {
@@ -66,7 +66,7 @@ impl MemoryMap {
 
         match self.data.get_mut(index) {
             Some(elem) => {
-                // if not allocate memory
+                // Allocate memory if not allocated yet
                 if elem.is_empty() {
                     elem.resize(self.sector_size, 0xFF);
                 }
@@ -79,10 +79,10 @@ impl MemoryMap {
     }
 
     /**
-     * 複数バイトデータをセット
+     * Set multiple bytes.
      *
-     * @param address アドレス
-     * @param data データ
+     * @param address Address
+     * @param data Data
      */
     pub fn set_bytes(&mut self, address: u32, data: Vec<u8>) {
         for (i, byte) in data.iter().enumerate() {
@@ -91,9 +91,9 @@ impl MemoryMap {
     }
 
     /**
-     * 1バイトデータを取得
+     * Get a single byte
      *
-     * @param address アドレス
+     * @param address Address
      * @return u8
      */
     pub fn get_byte(&self, address: u32) -> u8 {
@@ -118,10 +118,10 @@ impl MemoryMap {
     }
 
     /**
-     * 複数バイトデータを取得
+     * Get multiple bytes
      *
-     * @param address アドレス
-     * @param size サイズ
+     * @param address Address
+     * @param size Size
      * @return Vec<u8>
      */
     pub fn get_bytes(&self, address: u32, size: usize) -> Vec<u8> {
@@ -139,9 +139,9 @@ mod memory_map_tests {
 
     #[test]
     fn set_get_byte_normal() {
-        let mut mem_map = MemoryMap::new(0x1000, 0x100);
+        let mut mem_map = MemoryMap::new(0x1000, 0x100);    // Size 0x1000 (4KB), Sector size 0x100 (256B)
 
-        // 正常系 : 書き込みと読み出し
+        // Normal case: Write and read operations
         mem_map.set_byte(0, 0xAA);
         mem_map.set_byte(0x100, 0xBB);
 
@@ -152,7 +152,7 @@ mod memory_map_tests {
         assert_eq!(mem_map.get_byte(0x200), 0xFF);
         assert_eq!(mem_map.get_byte(0xFFF), 0xFF);
 
-        // 正常系 : 上書き
+        // Normal case: Overwrite operations
         mem_map.set_byte(0, 0xBB);
         mem_map.set_byte(0x100, 0xAA);
 
@@ -165,7 +165,7 @@ mod memory_map_tests {
     fn set_get_byte_abnormal() {
         let mut mem_map = MemoryMap::new(0x1000, 0x100);
 
-        // 異常系 : 不正なアドレスアクセス
+        // Error case: Invalid address access
         mem_map.get_byte(0x1000);
     }
 
@@ -188,7 +188,7 @@ mod memory_map_tests {
     fn set_get_multi_byte_abnormal() {
         let mut mem_map = MemoryMap::new(0x1000, 0x100);
 
-        // 異常系 : 不正なアドレスアクセス
+        // Error case: Invalid address access
         mem_map.get_bytes(0xFFFF, 2);
     }
 }
