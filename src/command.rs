@@ -2,12 +2,6 @@ use crate::hexlib::{data_type::range::AddressRange, utility::range_utils};
 use crate::hexlib::HexLib;
 use std::collections::HashMap;
 
-enum ConvertFormat {
-    ToIntelHex,
-    ToMotorolaSRecord,
-    ToRawBinary,
-}
-
 #[derive(Clone)]
 struct OptionInfo {
     name: String,
@@ -20,12 +14,14 @@ type OptionFunc = fn(&mut Command, Vec<String>, &mut HexLib) -> Result<(), Strin
 pub struct Command {
     run_options: Vec<(OptionFunc, Vec<String>)>,
     ranges: Vec<AddressRange>,
+    offset: usize,
 }
 
 impl Command {
     const OPTION_HELP: &str = "help";
     const OPTION_VERSION: &str = "version";
     const OPTION_RANGE: &str = "range";
+    const OPTION_OFFSET: &str = "offset";
     const OPTION_VIEW: &str = "view";
     const OPTION_CONVERT: &str = "convert";
     const OPTION_CREATE: &str = "create";
@@ -38,6 +34,7 @@ impl Command {
         Command {
             run_options: Vec::new(),
             ranges: Vec::new(),
+            offset: 0,
         }
     }
 
@@ -191,7 +188,7 @@ impl Command {
         }
 
         let filename = &args[0];
-        if let Err(e) = hexlib.read_file(filename) {
+        if let Err(e) = hexlib.read_file(filename, self.offset) {
             return Err(format!("Failed to read file: {}", e));
         }
 
@@ -220,7 +217,7 @@ impl Command {
         let filename = &args[0];
         let format = &args[1];
 
-        if let Err(e) = hexlib.read_file(filename) {
+        if let Err(e) = hexlib.read_file(filename, 0) {
             return Err(format!("Failed to read file: {}", e));
         }
 

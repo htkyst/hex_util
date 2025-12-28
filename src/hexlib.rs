@@ -52,11 +52,11 @@ impl HexLib {
         }
     }
 
-    pub fn read_file(&mut self, file_path: &str) -> Result<(), String> {
+    pub fn read_file(&mut self, file_path: &str, offset: usize) -> Result<(), String> {
         match Self::get_file_type(file_path) {
             FileType::IntelHex => file_io::intel_hex::read_intelhex_file(file_path, &mut self.data_buffer),
             FileType::MotorolaSRecord => file_io::srecord::read_srecord_file(file_path, &mut self.data_buffer),
-            FileType::Binary => Err("Binary format not supported yet.".to_string()),
+            FileType::Binary => file_io::raw_binary::read_binary_file(file_path, offset, &mut self.data_buffer),
             FileType::Unknown => Err("Unknown file format.".to_string()),
         }
     }
@@ -65,7 +65,7 @@ impl HexLib {
         match Self::get_file_type(file_path) {
             FileType::IntelHex => file_io::intel_hex::write_intelhex_file(file_path, &self.data_buffer, &ranges),
             FileType::MotorolaSRecord => file_io::srecord::write_srecord_file(file_path, &self.data_buffer, &ranges),
-            FileType::Binary => Err("Binary format not supported yet.".to_string()),
+            FileType::Binary => file_io::raw_binary::write_binary_file(file_path, &self.data_buffer, &ranges),
             FileType::Unknown => Err("Unknown file format.".to_string()),
         }
     }
