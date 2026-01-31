@@ -1,5 +1,6 @@
-use crate::hexlib::utility::data_buffer::DataBuffer;
-use crate::hexlib::data_type::range::AddressRange;
+use crate::hexlib::memory::range::AddressRange;
+use crate::hexlib::memory::memory_map::MemoryMap;
+use crate::hexlib::utility::range_utils::*;
 use std::fs::File;
 use std::io::{BufRead, BufReader, BufWriter, Write};
 
@@ -63,9 +64,9 @@ fn parse_hex_line(line: String) -> Result<IntelHexRecordData, String> {
  * Read Intel HEX file 
  *
  * @param file_path Path to the Intel HEX file
- * @param buffer Data buffer to store read data
+ * @param memory_map Memory map to store read data
  */
-pub fn read_intelhex_file(file_path: &str, buffer: &mut DataBuffer) -> Result<(), String> {
+pub fn read_intelhex_file(file_path: &str, memory_map: &mut MemoryMap, address_ranges: &mut Vec<AddressRange>) -> Result<(), String> {
     let file = File::open(file_path).map_err(|e| e.to_string());
     let reader = BufReader::new(file?);
 
@@ -82,7 +83,10 @@ pub fn read_intelhex_file(file_path: &str, buffer: &mut DataBuffer) -> Result<()
                     0x00 => {
                         // Data record: Record type for actual data content
                         let full_address = extend_address + record.address as u32;
-                        buffer.set_data(full_address, record.data);
+                        let range_size = record.data.len() as u32;
+                        memory_map.set_bytes(full_address, record.data);
+                        let range = AddressRange::new(full_address, full_address + range_size - 1);
+                        rebuild_ranges(address_ranges, range);
                     }
                     0x01 => {
                         // End of file record: Indicates the end of the Intel HEX file
@@ -142,7 +146,7 @@ fn make_hex_record_line(count: u8, address: u16, record_type: u8, data: &Vec<u8>
  * @param file_path Path to the Intel HEX file
  * @param buffer Data buffer to write
  */
-pub fn write_intelhex_file(file_path: &str, buffer: &DataBuffer, write_ranges: &Vec<AddressRange>) -> Result<(), String> {
+pub fn write_intelhex_file(file_path: &str, memory_map: &MemoryMap, write_ranges: &Vec<AddressRange>) -> Result<(), String> {
     let mut file = File::create(file_path).map_err(|e| e.to_string())?;
     let mut writer = BufWriter::new(&mut file);
 
@@ -169,7 +173,7 @@ pub fn write_intelhex_file(file_path: &str, buffer: &DataBuffer, write_ranges: &
 
         // Write data in chunks of LINE_DATA_SIZE
         for base_addr in (start_addr..range.end + 1).step_by(LINE_DATA_SIZE) {
-            let data = buffer.get_data(base_addr, LINE_DATA_SIZE);
+            let data = memory_map.get_bytes(base_addr, LINE_DATA_SIZE);
             let hex_line = make_hex_record_line(data.len() as u8, base_addr as u16, 0, &data);
 
             writer.write(hex_line.as_bytes()).unwrap();

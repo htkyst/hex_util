@@ -1,5 +1,6 @@
-use crate::hexlib::utility::data_buffer::DataBuffer;
-use crate::hexlib::data_type::range::AddressRange;
+use crate::hexlib::memory::range::AddressRange;
+use crate::hexlib::memory::memory_map::MemoryMap;
+use crate::hexlib::utility::range_utils::*;
 use std::fs::File;
 use std::io::{BufRead, BufReader, BufWriter, Write};
 
@@ -93,7 +94,7 @@ fn parse_hex_line(line: String) -> Result<SRecordData, String> {
  * @param file_path Path to the S-record file
  * @param buffer DataBuffer to load data into
  */
-pub fn read_srecord_file(file_path: &str, buffer: &mut DataBuffer) -> Result<(), String> {
+pub fn read_srecord_file(file_path: &str, memory_map: &mut MemoryMap, address_ranges: &mut Vec<AddressRange>) -> Result<(), String> {
     let file = File::open(file_path).map_err(|e| e.to_string());
     let reader = BufReader::new(file?);
 
@@ -107,7 +108,10 @@ pub fn read_srecord_file(file_path: &str, buffer: &mut DataBuffer) -> Result<(),
         match parse_hex_line(line) {
             Ok(record) => match record.record_type {
                 1 | 2 | 3 => {
-                    buffer.set_data(record.address, record.data);
+                    let range_size = record.data.len() as u32;
+                    memory_map.set_bytes(record.address, record.data);
+                    let range = AddressRange::new(record.address, record.address + range_size - 1);
+                    rebuild_ranges(address_ranges, range);
                 }
                 _ => {
                     continue;
@@ -131,12 +135,12 @@ pub fn read_srecord_file(file_path: &str, buffer: &mut DataBuffer) -> Result<(),
  * @param buffer DataBuffer containing data to write
  * @param ranges Address ranges to write
  */
-pub fn write_srecord_file(file_path: &str, buffer: &DataBuffer, ranges: &Vec<AddressRange>) -> Result<(), String> {
+pub fn write_srecord_file(file_path: &str, memory_map: &MemoryMap, address_ranges: &Vec<AddressRange>) -> Result<(), String> {
     let mut file = File::create(file_path).map_err(|e| e.to_string())?;
     let mut writer = BufWriter::new(&mut file);
 
-    for range in ranges {
-        let data = buffer.get_data(range.start, (range.end - range.start + 1) as usize);
+    for range in address_ranges {
+        let data = memory_map.get_bytes(range.start, (range.end - range.start + 1) as usize);
         if data.is_empty() {
             continue;
         }

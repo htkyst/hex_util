@@ -70,7 +70,7 @@ mod address_range_tests {
     #[test]
     fn address_range_normal() {
         let range = AddressRange::new(30, 70);
-        assert_eq!(range.size(), 40);
+        assert_eq!(range.size(), 41);
 
         // 前方重なり
         let mut range2 = AddressRange::new(0, 40);

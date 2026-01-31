@@ -1,20 +1,43 @@
-use crate::hexlib::{data_type::range::AddressRange, utility::range_utils};
-use crate::hexlib::HexLib;
+use crate::hexlib::*;
+use crate::hexlib::memory::memory_map::MemoryMap;
+use crate::hexlib::memory::range::AddressRange;
 use std::collections::HashMap;
+
+#[derive(Clone, Ord, PartialOrd, Eq, PartialEq)]
+enum OptionOrderType {
+    InAdvanceInfo,
+    Setup,
+    Runner,
+    AfterTheFuctInfo,
+    Debug,
+}
+
+impl OptionOrderType {
+    fn priority(&self) -> u8 {
+        match self {
+            OptionOrderType::InAdvanceInfo => 1,
+            OptionOrderType::Setup => 5,
+            OptionOrderType::Runner => 10,
+            OptionOrderType::AfterTheFuctInfo => 50,
+            OptionOrderType::Debug => 99,
+        }
+    }
+}
 
 #[derive(Clone)]
 struct OptionInfo {
     name: String,
     description: String,
-    priority: u32,
+    priority: OptionOrderType,
 }
 
-type OptionFunc = fn(&mut Command, Vec<String>, &mut HexLib) -> Result<(), String>;
+type OptionFunc = fn(&mut Command, Vec<String>) -> Result<(), String>;
 
 pub struct Command {
     run_options: Vec<(OptionFunc, Vec<String>)>,
-    ranges: Vec<AddressRange>,
-    offset: usize,
+    buffer: HexDataBuffer,
+    in_ranges: Vec<AddressRange>,   // User input address ranges
+    in_offset: usize,               // User input offset
 }
 
 impl Command {
@@ -33,8 +56,9 @@ impl Command {
     pub fn new() -> Command {
         Command {
             run_options: Vec::new(),
-            ranges: Vec::new(),
-            offset: 0,
+            buffer: HexDataBuffer::new(),
+            in_ranges: Vec::new(),
+            in_offset: 0,
         }
     }
 
@@ -45,7 +69,7 @@ impl Command {
                 OptionInfo {
                     name: Self::OPTION_HELP.to_string(),
                     description: "Show help message".to_string(),
-                    priority: 1,
+                    priority: OptionOrderType::InAdvanceInfo,
                 },
             ),
             (
@@ -53,7 +77,7 @@ impl Command {
                 OptionInfo {
                     name: Self::OPTION_VERSION.to_string(),
                     description: "Show version".to_string(),
-                    priority: 1,
+                    priority: OptionOrderType::InAdvanceInfo,
                 },
             ),
             (
@@ -61,7 +85,15 @@ impl Command {
                 OptionInfo {
                     name: Self::OPTION_RANGE.to_string(),
                     description: "Specify address range".to_string(),
-                    priority: 2,
+                    priority: OptionOrderType::Setup,
+                },
+            ),
+            (
+                Self::OPTION_OFFSET.to_owned(),
+                OptionInfo {
+                    name: Self::OPTION_OFFSET.to_string(),
+                    description: "Specify offset of address".to_string(),
+                    priority: OptionOrderType::Setup,
                 },
             ),
             (
@@ -69,7 +101,7 @@ impl Command {
                 OptionInfo {
                     name: Self::OPTION_VIEW.to_string(),
                     description: "View data in hex file".to_string(),
-                    priority: 3,
+                    priority: OptionOrderType::AfterTheFuctInfo,
                 },
             ),
             (
@@ -77,7 +109,7 @@ impl Command {
                 OptionInfo {
                     name: Self::OPTION_CONVERT.to_string(),
                     description: "Convert hex file format".to_string(),
-                    priority: 4,
+                    priority: OptionOrderType::Runner,
                 },
             ),
             (
@@ -85,7 +117,7 @@ impl Command {
                 OptionInfo {
                     name: Self::OPTION_CREATE.to_string(),
                     description: "Create hex file".to_string(),
-                    priority: 4,
+                    priority: OptionOrderType::Runner,
                 },
             ),
             (
@@ -93,7 +125,7 @@ impl Command {
                 OptionInfo {
                     name: Self::OPTION_DEBUG.to_string(),
                     description: "Debug option".to_string(),
-                    priority: 99,
+                    priority: OptionOrderType::Debug,
                 },
             ),
         ]
@@ -114,7 +146,7 @@ impl Command {
             }
         }
 
-        specific_options.sort_by_key(|(info, _)| info.priority);
+        specific_options.sort_by_key(|(info, _)| info.priority.priority());
 
         for (opt_info, opt_args) in specific_options {
             if let Some(callback) = self.get_option_callback(&opt_info.name) {
@@ -128,10 +160,10 @@ impl Command {
     }
 
     // Run the analyzed commands
-    pub fn run(&mut self, hexlib: &mut HexLib) -> Result<(), String> {
+    pub fn run(&mut self) -> Result<(), String> {
         let options: Vec<_> = self.run_options.iter().cloned().collect();
         for (opt_func, opt_args) in options {
-            match (opt_func)(self, opt_args, hexlib) {
+            match (opt_func)(self, opt_args) {
                 Ok(()) => {}
                 Err(e) => return Err(e),
             }
@@ -141,7 +173,7 @@ impl Command {
 
     //// Command Option Implementations ////
 
-    fn help_option(&mut self, _args: Vec<String>, _hexlib: &mut HexLib) -> Result<(), String> {
+    fn help_option(&mut self, _args: Vec<String>) -> Result<(), String> {
         println!("Available options:");
         for (optname, params) in self.get_option_list() {
             println!(" - {} \t\t: {}", optname, params.description);
@@ -149,12 +181,12 @@ impl Command {
         Ok(())
     }
 
-    fn version_option(&mut self, _args: Vec<String>, _hexlib: &mut HexLib) -> Result<(), String> {
+    fn version_option(&mut self, _args: Vec<String>) -> Result<(), String> {
         println!("Version: {}", env!("CARGO_PKG_VERSION"));
         Ok(())
     }
 
-    fn range_option(&mut self, args: Vec<String>, _hexlib: &mut HexLib) -> Result<(), String> {
+    fn range_option(&mut self, args: Vec<String>) -> Result<(), String> {
         if args.len() != 2 {
             return Err("Specify <start> <end>".to_string());
         }
@@ -176,40 +208,61 @@ impl Command {
             }
         }
 
-        range_utils::rebuild_ranges(&mut self.ranges, AddressRange::new(start_addr, end_addr));
+        utility::range_utils::rebuild_ranges(&mut self.in_ranges, AddressRange::new(start_addr, end_addr));
 
         Ok(())
     }
 
-    fn view_option(&mut self, args: Vec<String>, hexlib: &mut HexLib) -> Result<(), String> {
+    fn offset_option(&mut self, args: Vec<String>) -> Result<(), String> {
+        if args.len() != 1 {
+            return Err("Specify <offset>".to_string());
+        }
+
+        let offset_str = &args[0];
+        if let Some(offset_hex) = offset_str.strip_prefix("0x") {
+            match usize::from_str_radix(offset_hex, 16) {
+                Ok(val) => self.in_offset = val,
+                Err(_) => return Err("Invalid offset format".to_string()),
+            }
+        } else {
+            match offset_str.parse::<usize>() {
+                Ok(val) => self.in_offset = val,
+                Err(_) => return Err("Invalid offset format".to_string()),
+            }
+        }
+
+        Ok(())
+    }
+
+    fn view_option(&mut self, args: Vec<String>) -> Result<(), String> {
         // single argument <filename>
         if args.len() != 1 {
             return Err("Specify <filename>".to_string());
         }
 
         let filename = &args[0];
-        if let Err(e) = hexlib.read_file(filename, self.offset) {
+        if let Err(e) = read_file(filename, self.in_offset, &mut self.buffer) {
             return Err(format!("Failed to read file: {}", e));
         }
 
-        if self.ranges.len() > 0 {
-            for range in &self.ranges {
+        if self.in_ranges.len() > 0 {
+            for range in &self.in_ranges {
                 let start = range.start;
                 let end = range.end;
-                hexlib.show_hex_data(start, end);
+                show_hex_data(self.buffer.get_memory_map(), start, end);
             }
         } else {
-            for range in hexlib.data_buffer.get_data_ranges() {
+            for range in self.buffer.get_address_ranges() {
                 let start = range.start;
                 let end = range.end;
-                hexlib.show_hex_data(start, end);
+                show_hex_data(self.buffer.get_memory_map(), start, end);
             }
         }
 
         Ok(())
     }
 
-    fn convert_option(&mut self, args: Vec<String>, hexlib: &mut HexLib) -> Result<(), String> {
+    fn convert_option(&mut self, args: Vec<String>) -> Result<(), String> {
         if args.len() != 2 {
             return Err("Specify <input filename> <format>".to_string());
         }
@@ -217,21 +270,30 @@ impl Command {
         let filename = &args[0];
         let format = &args[1];
 
-        if let Err(e) = hexlib.read_file(filename, 0) {
+        if let Err(e) = read_file(filename, self.in_offset, &mut self.buffer) {
             return Err(format!("Failed to read file: {}", e));
+        }
+
+        if let Err(e) = match format.as_str() {
+            "hex" => write_file("output.hex", self.buffer.get_memory_map(), &self.buffer.get_address_ranges()),
+            "srec" => write_file("output.srec", self.buffer.get_memory_map(), &self.buffer.get_address_ranges()),
+            "bin" => write_file("output.bin", self.buffer.get_memory_map(), &self.buffer.get_address_ranges()),
+            _ => Err("Unsupported format. Use 'hex', 'srec', or 'bin'.".to_string()),
+        } {
+            return Err(format!("Failed to write file: {}", e));
         }
 
         Ok(())
     }
 
-    fn create_option(&mut self, args: Vec<String>, hexlib: &mut HexLib) -> Result<(), String> {
+    fn create_option(&mut self, args: Vec<String>) -> Result<(), String> {
         Ok(())
     }
 
-    fn debug_option(&mut self, _args: Vec<String>, hexlib: &mut HexLib) -> Result<(), String> {
+    fn debug_option(&mut self, _args: Vec<String>) -> Result<(), String> {
         println!("Debug Info:");
 
-        for range in self.ranges.iter() {
+        for range in self.in_ranges.iter() {
             println!(" Range: 0x{:08X} - 0x{:08X}", range.start, range.end);
         }
         Ok(())

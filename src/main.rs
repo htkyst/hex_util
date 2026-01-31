@@ -1,5 +1,4 @@
 use hex_util::command;
-use hex_util::hexlib::HexLib;
 use std::env;
 use std::process::ExitCode;
 
@@ -12,13 +11,11 @@ fn main() -> ExitCode {
         return ExitCode::FAILURE;
     }
 
-    let mut command = command::Command::new();
-    let mut hex = HexLib::new();
-
     // Analyze & Execute command options
+    let mut command = command::Command::new();
     match command.analyze(tokens) {
         Ok(()) => {
-            if let Err(e) = command.run(&mut hex) {
+            if let Err(e) = command.run() {
                 eprintln!("Error: {}", e);
                 return ExitCode::FAILURE;
             }
@@ -39,7 +36,20 @@ fn check_option_format(option: &str) -> bool {
 }
 
 // Parse command line arguments into a list of options and their arguments
-pub fn parse_command_line(tokens: &Vec<String>) -> Vec<(String, Vec<String>)> {
+/// 
+/// # Returns
+/// 
+/// A vector of tuples, where each tuple contains an option name (without the leading "--")
+/// and a vector of its associated arguments.
+/// 
+/// # Examples
+/// 
+/// ```
+/// let args = vec!["--input".to_string(), "file.hex".to_string(), "--output".to_string(), "out.bin".to_string()];
+/// let result = parse_command_line(&args);
+/// // result: [("input", ["file.hex"]), ("output", ["out.bin"])]
+/// `
+fn parse_command_line(tokens: &Vec<String>) -> Vec<(String, Vec<String>)> {
     if tokens.len() < 1 {
         return Vec::new();
     }
@@ -64,4 +74,41 @@ pub fn parse_command_line(tokens: &Vec<String>) -> Vec<(String, Vec<String>)> {
     }
 
     options
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_check_option_format() {
+        assert!(check_option_format("--option") == true);
+        assert!(check_option_format("-option") == false);
+        assert!(check_option_format("option") == false);
+        assert!(check_option_format("--") == false);
+    }
+
+    #[test]
+    fn test_parse_command_line() {
+        let args = vec![
+            "--opt1".to_string(),
+            "p1".to_string(),
+            "--opt2".to_string(),
+            "p1".to_string(),
+            "p2".to_string(),
+            "p3".to_string(),
+        ];
+        let result = parse_command_line(&args);
+        assert_eq!(
+            result,
+            vec![
+                ("opt1".to_string(), vec!["p1".to_string()]),
+                ("opt2".to_string(), vec!["p1".to_string(), "p2".to_string(), "p3".to_string()]),
+            ]
+        );
+
+        let args_no_options = vec!["file.hex".to_string(), "out.bin".to_string()];
+        let result_no_options = parse_command_line(&args_no_options);
+        assert!(result_no_options.is_empty());
+    }
 }

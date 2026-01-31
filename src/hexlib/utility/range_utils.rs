@@ -1,4 +1,4 @@
-use crate::hexlib::data_type::range::AddressRange;
+use crate::hexlib::memory::range::AddressRange;
 
 /**
  * Rebuild address ranges by merging overlapping or adjacent ranges
